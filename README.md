@@ -20,9 +20,42 @@ Simple docker compose for getting ComfyUI and sd-webui (Forge) up and running wi
    4. After getting that message start ComfyUI by open browser with the following link: http://localhost:31488
    5. or WebUI by going to http://localhost:31489
 
-You could also try run the script **run-local.sh** which will run ComfyUI without any container.
+### Run locally (no Docker)
 
-The script creates a marker file that will skip downloading of python libraries to speedup the startup.
+You can also run without containers using the helper script:
+
+```
+./run-local.sh
+```
+
+- On first run it will create a Python virtual environment and set up ComfyUI, ROCm PyTorch and Flash Attention.
+- It creates a marker file in the data directory to skip repeated heavy setup on subsequent runs.
+- By default it prompts whether to reinstall ROCm Torch and Flash Attention. To automate, use environment variables:
+  - `NON_INTERACTIVE=1` to disable prompts
+  - `REINSTALL_ROCM=yes` to reinstall ROCm Torch in non-interactive mode
+  - `REINSTALL_FLASH=yes` to reinstall Flash Attention in non-interactive mode
+
+You can customize behavior via a `.env` file at the repo root (auto-loaded) or by exporting variables before running:
+
+- `PYTHON_VERSION` (default `3.12`)
+- `ROCM_VERSION` (`nightly`, `release`, or `cpuonly`; default `nightly` for local run)
+- `ROOT_DIR` (default `${PWD}/data/home-local`)
+- `COMFYUI_PORT` (default `31490`)
+
+Example non-interactive run on CPU-only:
+
+```
+ROCM_VERSION=cpuonly NON_INTERACTIVE=1 ./run-local.sh
+```
+
+Important: The provided .env in this repo is tailored for Docker and sets ROOT_DIR=/root. When running locally as a non-root user, run-local.sh will ignore ROOT_DIR=/root and use ${PWD}/data/home-local instead. To explicitly control this, set ROOT_DIR to a writable directory when invoking the script or in your own .env.local file.
+
+Examples:
+```
+ROOT_DIR="$PWD/data/home-local" ./run-local.sh
+# or
+export ROOT_DIR="$PWD/data/home-local"; ./run-local.sh
+```
 
 ## Hints
 

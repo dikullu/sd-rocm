@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e # exit on error
+#set -e # exit on error
 #set -x # enable debug mode
 
 echo "Docker instance: ${DOCKER_INSTANCE}"
@@ -92,16 +92,27 @@ activate_venv() {
         exit 1
     esac
 
-    export PATH="${HOME}/.pyenv/bin:${PATH}"
+    VENV_DIR="${ROOT_DIR}/venv-${DOCKER_INSTANCE}-${PYTHON_VERSION}"
 
-    pyenv install "${PYTHON_VERSION_FULL}" --skip-existing
-    pyenv global "${PYTHON_VERSION_FULL}"
+    if command -v pyenv >/dev/null 2>&1; then
+      export PATH="${HOME}/.pyenv/bin:${PATH}"
+      pyenv install "${PYTHON_VERSION_FULL}" --skip-existing || true
+      pyenv global "${PYTHON_VERSION_FULL}" || true
+      export PATH="${HOME}/.pyenv/versions/${PYTHON_VERSION_FULL}/bin:${PATH}"
+      PYTHON_BIN="${HOME}/.pyenv/shims/python${PYTHON_VERSION}"
+      if [ ! -x "$PYTHON_BIN" ]; then
+        PYTHON_BIN="python${PYTHON_VERSION}"
+      fi
+    else
+      echo "pyenv not found; falling back to system Python."
+      PYTHON_BIN="python${PYTHON_VERSION}"
+      if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+        PYTHON_BIN="python3"
+      fi
+    fi
 
-    export PATH="${HOME}/.pyenv/versions/${PYTHON_VERSION_FULL}/bin:${PATH}"
-      
-    "${HOME}/.pyenv/shims/python${PYTHON_VERSION}" -m venv "${ROOT_DIR}/venv-${DOCKER_INSTANCE}-${PYTHON_VERSION}"
+    "$PYTHON_BIN" -m venv "$VENV_DIR"
 
-  
     echo "venv environment initialization complete."
     echo "===================="
   
@@ -112,9 +123,10 @@ activate_venv() {
   fi
 
   # shellcheck disable=SC1090
+  # shellcheck source=/dev/null
   source "${ROOT_DIR}/venv-${DOCKER_INSTANCE}-${PYTHON_VERSION}/bin/activate"
   
-  pip3 install --upgrade pip --root-user-action=ignore
+#  pip3 install --upgrade pip --root-user-action=ignore
 }
 
 install_rocm_torch() {
@@ -122,11 +134,14 @@ install_rocm_torch() {
   echo "===================="
   pip3 uninstall torch torchaudio torchvision safetensors pytorch_triton triton -y
   pip3 install triton --root-user-action=ignore
-
+  
+  pip3 uninstall onnxruntime onnxruntime-rocm -y
+  pip3 install onnxruntime onnxruntime-rocm -f https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4/
+  
   case "${ROCM_VERSION}" in
     nightly)
       pip3 install --pre \
-          torch torchvision safetensors triton pytorch_triton \
+          torch torchvision safetensors triton pytorch_triton torchaudio \
           --index-url https://download.pytorch.org/whl/nightly/rocm6.4 \
           --root-user-action=ignore
       ;;
@@ -156,7 +171,7 @@ install_rocm_torch() {
 install_flash_attention() {
   echo "Setting up Flash Attention with ROCm support..."
 
-  pip uninstall -y flash-attn
+  pip3 uninstall -y flash-attn
 
   if [ -d "${ROOT_DIR}/flash-attention" ]; then
     echo "Removing previous flash-attention directory..."
@@ -164,7 +179,7 @@ install_flash_attention() {
   fi
   
   echo "Cloning flash-attention repository..."
-  git clone git@github.com:Dao-AILab/flash-attention.git "${ROOT_DIR}/flash-attention" 
+  git clone https://github.com/Dao-AILab/flash-attention.git "${ROOT_DIR}/flash-attention"
 
   cd "${ROOT_DIR}/flash-attention"
   
@@ -174,11 +189,12 @@ install_flash_attention() {
   export FLASH_ATTENTION_DISABLE_FUSED_DENSE=1  # Skip the fused dense implementation
   export FLASH_ATTENTION_DISABLE_FUSED_SOFTMAX=1  # Skip fused softmax
   export FLASH_ATTENTION_DISABLE_TRITON=0  # Enable triton
+  export TRITON_BUILD_WITH_ROCM=1  # Add this
   export FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE"
   
   # Install the package with pip instead of setup.py directly
   echo "Installing flash-attention..."
-  pip install -e . --root-user-action=ignore
+  pip3 install -e . --no-build-isolation --root-user-action=ignore
   
   echo "Flash Attention installation completed."
 }
@@ -201,6 +217,9 @@ setup_comfyui() {
 
     install_rocm_torch
     install_flash_attention
+    
+    #install some pips ReActor needs
+    pip3 install onnxruntime --root-user-action=ignore
     
     # use shared model folder
     if [ -d "${ROOT_DIR}/comfyui/models/checkpoints" ]; then
@@ -269,10 +288,16 @@ launch_comfyui() {
 
   export FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE" 
   COMMAND+=("--use-flash-attention")
+  
+# May help with certain model loading issues
+COMMAND+=("--disable-smart-memory")
 
-  # reserve vram
-  # COMMAND+=("--reserve-vram 3")
-
+export GPU_MAX_HEAP_SIZE=100
+export GPU_SINGLE_ALLOC_PERCENT=100
+export HSA_ENABLE_INTERRUPT=0
+export PYTORCH_HIP_ALLOC_CONF="garbage_collection_threshold:0.8,max_split_size_mb:512"
+export HSA_ENABLE_SDMA=0  # Can improve performance on some AMD GPUs
+  
   if [[ "${ROCM_VERSION}" == cpuonly ]]; then   
     COMMAND+=("--cpu")
   fi
