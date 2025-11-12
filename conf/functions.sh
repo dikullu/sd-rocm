@@ -15,17 +15,20 @@ FUNCTIONS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 has_rocm() {
   GFX_NAME=$(rocminfo | grep -m 1 -E "gfx[^0]{1}" | sed -e 's/ *Name: *//' | awk '{$1=$1; print}' || echo "rocminfo missing")
   echo "GFX_NAME = $GFX_NAME"
-    
+
   case "${GFX_NAME}" in
-    gfx1101 | gfx1100)
-      export HSA_OVERRIDE_GFX_VERSION="11.0.0"
-      ;;
-    *)
-      if [[ "${ROCM_VERSION}" != cpuonly ]]; then
-        echo "GFX version detection error" >&2
-        exit 1
-      fi
-      ;;
+  gfx1101 | gfx1100)
+    export HSA_OVERRIDE_GFX_VERSION="11.0.0"
+    ;;
+  gfx1151)
+    export HSA_OVERRIDE_GFX_VERSION="11.5.1"
+    ;;
+  *)
+    if [[ "${ROCM_VERSION}" != cpuonly ]]; then
+      echo "GFX version detection error" >&2
+      exit 1
+    fi
+    ;;
   esac
 }
 
@@ -64,7 +67,7 @@ activate_venv() {
 
   if [ ! -f "${MARKER_FILE}" ]; then
     echo "venv not initialized. Initializing now..."
-    echo "===================="   
+    echo "===================="
 
     # only install pyenv on docker container
     if [[ "${DOCKER_INSTANCE}" != local-* ]]; then
@@ -81,17 +84,18 @@ activate_venv() {
     fi
 
     case "${PYTHON_VERSION}" in
-      3.10)
-        # https://peps.python.org/pep-0619/
-        PYTHON_VERSION_FULL="${PYTHON_VERSION}.16"
-        ;;
-      3.12)
-        # https://peps.python.org/pep-0693/
-        PYTHON_VERSION_FULL="${PYTHON_VERSION}.8"
-        ;;
-      *)
-        echo "Unsupported python version ${PYTHON_VERSION}" >&2
-        exit 1
+    3.10)
+      # https://peps.python.org/pep-0619/
+      PYTHON_VERSION_FULL="${PYTHON_VERSION}.16"
+      ;;
+    3.12)
+      # https://peps.python.org/pep-0693/
+      PYTHON_VERSION_FULL="${PYTHON_VERSION}.8"
+      ;;
+    *)
+      echo "Unsupported python version ${PYTHON_VERSION}" >&2
+      exit 1
+      ;;
     esac
 
     VENV_DIR="${ROOT_DIR}/venv-${DOCKER_INSTANCE}-${PYTHON_VERSION}"
@@ -117,7 +121,7 @@ activate_venv() {
 
     echo "venv environment initialization complete."
     echo "===================="
-  
+
     touch "${MARKER_FILE}"
   else
     echo "venv environment already initialized. Skipping initialization steps."
@@ -134,58 +138,61 @@ install_rocm_torch() {
   echo "===================="
   pip3 uninstall -y \
     torch torchvision torchaudio onnxruntime_rocm
-  
-  case "${ROCM_VERSION}" in
-    nightly)
-      pip3 uninstall -y numpy
-      # TODO: add support for all here
-      # https://github.com/ROCm/TheRock/blob/main/RELEASES.md#index-page-listing
-      case "${GFX_NAME}" in
-        gfx1101 | gfx1100)
-          THE_ROCK_URL="https://rocm.nightlies.amd.com/v2/gfx110X-dgpu"
-          ;;
-      *)
-        echo "GFX version detection error" >&2
-        exit 1
-        ;;
-      esac
-      
-      pip3 install --pre \
-          torch torchvision torchaudio numpy \
-          --index-url  "$THE_ROCK_URL"\
-          --root-user-action=ignore
 
-      # onnxruntime not available in nightly
-      case "${PYTHON_VERSION}" in
-        3.10)
-          pip3 install \
-            https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
-          ;;
-        3.12)
-          pip3 install \
-            https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
-          ;;
-        *)
-          echo "Unsupported python version ${PYTHON_VERSION}" >&2
-          exit 1
-      esac
-  ;;
-    release)
-      pip3 install \
-          torch torchvision torchaudio onnxruntime_rocm \
-          --index-url https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0\
-          --root-user-action=ignore
-              ;;
-    cpuonly)
-      pip3 install \
-          torch torchvision torchaudio \
-          --extra-index-url https://download.pytorch.org/whl/cpu \
-          --root-user-action=ignore
+  case "${ROCM_VERSION}" in
+  nightly)
+    pip3 uninstall -y numpy
+    # TODO: add support for all here
+    # https://github.com/ROCm/TheRock/blob/main/RELEASES.md#index-page-listing
+    case "${GFX_NAME}" in
+    gfx1101 | gfx1100)
+      THE_ROCK_URL="https://rocm.nightlies.amd.com/v2/gfx110X-dgpu"
+      ;;
+    gfx1151)
+      THE_ROCK_URL="https://rocm.nightlies.amd.com/v2/gfx1151/"
       ;;
     *)
-      echo "unsupported ROCm version ${ROCM_VERSION}" >&2
+      echo "GFX version detection error" >&2
       exit 1
       ;;
+    esac
+
+    pip3 install --pre \
+      torch torchvision torchaudio numpy \
+      --index-url "$THE_ROCK_URL" \
+      --root-user-action=ignore
+
+    # onnxruntime not available in nightly
+    case "${PYTHON_VERSION}" in
+    3.10)
+      pip3 install \
+        https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+      ;;
+    3.12)
+      pip3 install \
+        https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0/onnxruntime_rocm-1.22.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+      ;;
+    *)
+      echo "Unsupported python version ${PYTHON_VERSION}" >&2
+      exit 1
+      ;;
+    esac
+    ;;
+  release)
+    pip3 install \
+      torch torchvision torchaudio onnxruntime_rocm \
+      --index-url https://repo.radeon.com/rocm/manylinux/rocm-rel-7.0 --root-user-action=ignore
+    ;;
+  cpuonly)
+    pip3 install \
+      torch torchvision torchaudio \
+      --extra-index-url https://download.pytorch.org/whl/cpu \
+      --root-user-action=ignore
+    ;;
+  *)
+    echo "unsupported ROCm version ${ROCM_VERSION}" >&2
+    exit 1
+    ;;
   esac
 }
 
@@ -203,25 +210,25 @@ install_flash_attention() {
     echo "Removing previous flash-attention directory..."
     rm -rf "${ROOT_DIR}/flash-attention"
   fi
-  
+
   echo "Cloning flash-attention repository..."
   git clone https://github.com/Dao-AILab/flash-attention.git "${ROOT_DIR}/flash-attention"
 
   cd "${ROOT_DIR}/flash-attention"
-  
+
   # Set environment variables for ROCm build
   export FLASH_ATTENTION_SKIP_CUDA_BUILD=1
   export FLASH_ATTENTION_FORCE_BUILD=1
-  export FLASH_ATTENTION_DISABLE_FUSED_DENSE=1  # Skip the fused dense implementation
-  export FLASH_ATTENTION_DISABLE_FUSED_SOFTMAX=1  # Skip fused softmax
-  export FLASH_ATTENTION_DISABLE_TRITON=0  # Enable triton
-  export TRITON_BUILD_WITH_ROCM=1  # Add this
+  export FLASH_ATTENTION_DISABLE_FUSED_DENSE=1   # Skip the fused dense implementation
+  export FLASH_ATTENTION_DISABLE_FUSED_SOFTMAX=1 # Skip fused softmax
+  export FLASH_ATTENTION_DISABLE_TRITON=0        # Enable triton
+  export TRITON_BUILD_WITH_ROCM=1                # Add this
   export FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE"
-  
+
   # Install the package with pip instead of setup.py directly
   echo "Installing flash-attention..."
   pip3 install -e . --no-build-isolation --root-user-action=ignore
-  
+
   echo "Flash Attention installation completed."
 }
 
@@ -243,10 +250,10 @@ setup_comfyui() {
 
     install_rocm_torch
     install_flash_attention
-    
+
     #install some pips ReActor needs
     pip3 install onnxruntime --root-user-action=ignore
-    
+
     # use shared model folder
     if [ -d "${ROOT_DIR}/comfyui/models/checkpoints" ]; then
       rm -r "${ROOT_DIR}/comfyui/models/checkpoints"
@@ -276,9 +283,9 @@ setup_webui() {
     echo "===================="
 
     if [ ! -d "${ROOT_DIR}/sd-webui" ]; then
-    # Uncomment to use old Automatic1111
-#    git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui "${ROOT_DIR}/sd-webui"
-    git clone https://github.com/lllyasviel/stable-diffusion-webui-forge "${ROOT_DIR}/sd-webui"
+      # Uncomment to use old Automatic1111
+      #    git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui "${ROOT_DIR}/sd-webui"
+      git clone https://github.com/lllyasviel/stable-diffusion-webui-forge "${ROOT_DIR}/sd-webui"
     fi
 
     cd "${ROOT_DIR}/sd-webui"
@@ -288,7 +295,7 @@ setup_webui() {
     install_rocm_torch
 
     # use shared model folder
-        if [ -d "${ROOT_DIR}/sd-webui/models/Stable-diffusion" ]; then
+    if [ -d "${ROOT_DIR}/sd-webui/models/Stable-diffusion" ]; then
       rm -r "${ROOT_DIR}/sd-webui/models/Stable-diffusion"
     fi
     ln -sf ../../../checkpoints "${ROOT_DIR}/sd-webui/models/Stable-diffusion"
@@ -314,12 +321,12 @@ launch_comfyui() {
   export DISABLE_ADDMM_CUDA_LT=1
 
   # Base arguments for ComfyUI main
-  ARGS=(main.py --listen 0.0.0.0 --port "${COMFYUI_PORT}" \
-      --front-end-version Comfy-Org/ComfyUI_frontend@latest)
+  ARGS=(main.py --listen 0.0.0.0 --port "${COMFYUI_PORT}"
+    --front-end-version Comfy-Org/ComfyUI_frontend@latest)
 
-  export FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE" 
+  export FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE"
   ARGS+=("--use-flash-attention")
-  
+
   # May help with certain model loading issues
   ARGS+=("--disable-smart-memory")
 
@@ -327,14 +334,14 @@ launch_comfyui() {
   export GPU_SINGLE_ALLOC_PERCENT=100
   export HSA_ENABLE_INTERRUPT=0
   export PYTORCH_HIP_ALLOC_CONF="garbage_collection_threshold:0.8,max_split_size_mb:512"
-  export HSA_ENABLE_SDMA=0  # Can improve performance on some AMD GPUs
-  
-  if [[ "${ROCM_VERSION}" == cpuonly ]]; then   
+  export HSA_ENABLE_SDMA=0 # Can improve performance on some AMD GPUs
+
+  if [[ "${ROCM_VERSION}" == cpuonly ]]; then
     ARGS+=("--cpu")
   fi
-  
+
   # Run the VAE on the CPU.
-#  ARGS+=("--cpu-vae")
+  #  ARGS+=("--cpu-vae")
 
   # Optional profiling support
   if [[ "${PROFILING}" == "1" || "${PROFILING}" == "true" || "${PROFILING}" == "TRUE" ]]; then
