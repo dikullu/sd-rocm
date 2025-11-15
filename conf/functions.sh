@@ -258,9 +258,31 @@ setup_comfyui() {
     if [ -d "${ROOT_DIR}/comfyui/models/checkpoints" ]; then
       rm -r "${ROOT_DIR}/comfyui/models/checkpoints"
     fi
+    # use shared vae folder
+    if [ -d "${ROOT_DIR}/comfyui/models/vae" ]; then
+      rm -r "${ROOT_DIR}/comfyui/models/vae"
+    fi
+    # use shared text_encoder folder
+    if [ -d "${ROOT_DIR}/comfyui/models/text_encoders" ]; then
+      rm -r "${ROOT_DIR}/comfyui/models/text_encoders"
+    fi
+    # use shared loras folder
+    if [ -d "${ROOT_DIR}/comfyui/models/loras" ]; then
+      rm -r "${ROOT_DIR}/comfyui/models/loras"
+    fi
+    # use shared diffusion_models folder
+    if [ -d "${ROOT_DIR}/comfyui/models/diffusion_models" ]; then
+      rm -r "${ROOT_DIR}/comfyui/models/diffusion_models"
+    fi
+
     ln -sf ../../../checkpoints "${ROOT_DIR}/comfyui/models/checkpoints"
+    ln -sf ../../../vae "${ROOT_DIR}/comfyui/models/vae"
+    ln -sf ../../../text_encoders "${ROOT_DIR}/comfyui/models/text_encoders"
+    ln -sf ../../../loras "${ROOT_DIR}/comfyui/models/loras"
+    ln -sf ../../../diffusion_models "${ROOT_DIR}/comfyui/models/diffusion_models"
 
     if [ ! -d "${ROOT_DIR}/comfyui/custom_nodes/ComfyUI-Manager" ]; then
+
       git clone https://github.com/ltdrdata/ComfyUI-Manager "${ROOT_DIR}/comfyui/custom_nodes/ComfyUI-Manager"
     fi
 

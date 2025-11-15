@@ -17,6 +17,10 @@ services:
     volumes:
       - ./data/home-comfyui:/root
       - ./data/checkpoints:/checkpoints
+      - ./data/vae:/vae
+      - ./data/text_encoders:/text_encoders
+      - ./data/loras:/loras
+      - ./data/diffusion_models:/diffusion_models
       - ./conf:/conf
     environment:
       - DOCKER_INSTANCE=comfyui
@@ -26,28 +30,28 @@ services:
       - COMFYUI_PORT=${COMFYUI_PORT}
 
 
-  stable-diffusion-webui:
-    image: rocm/pytorch:latest
-    ports:
-      - "${WEBUI_PORT}:${WEBUI_PORT}"
-    restart: no
-    command: ["/conf/startup-webui.sh"]
-    devices:
-      - "/dev/kfd:/dev/kfd" # remove this line if running on non ROCm
-      - "/dev/dri:/dev/dri"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    cap_add:
-      - SYS_PTRACE
-    security_opt:
-      - seccomp=unconfined
-    volumes:
-      - ./data/home-webui:/root
-      - ./data/checkpoints:/checkpoints
-      - ./conf:/conf
-    environment:
-      - DOCKER_INSTANCE=webui
-      - PYTHON_VERSION=${PYTHON_VERSION}
-      - ROCM_VERSION=${ROCM_VERSION}
-      - ROOT_DIR=${ROOT_DIR}
-      - WEBUI_PORT=${WEBUI_PORT}
+  # stable-diffusion-webui:
+  #   image: rocm/pytorch:latest
+  #   ports:
+  #     - "${WEBUI_PORT}:${WEBUI_PORT}"
+  #   restart: no
+  #   command: ["/conf/startup-webui.sh"]
+  #   devices:
+  #     - "/dev/kfd:/dev/kfd" # remove this line if running on non ROCm
+  #     - "/dev/dri:/dev/dri"
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   cap_add:
+  #     - SYS_PTRACE
+  #   security_opt:
+  #     - seccomp=unconfined
+  #   volumes:
+  #     - ./data/home-webui:/root
+  #     - ./data/checkpoints:/checkpoints
+  #     - ./conf:/conf
+  #   environment:
+  #     - DOCKER_INSTANCE=webui
+  #     - PYTHON_VERSION=${PYTHON_VERSION}
+  #     - ROCM_VERSION=${ROCM_VERSION}
+  #     - ROOT_DIR=${ROOT_DIR}
+  #     - WEBUI_PORT=${WEBUI_PORT}
